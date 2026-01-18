@@ -128,11 +128,16 @@ class MDGHandler:
             waveform_crop = F.pad(waveform, (0, target_samples - L))
 
         mel_spec = self.mel_transform(waveform_crop.squeeze(1))  # [batch, n_mels, time]
-        mel_spec = mel_spec.transpose(1, 2)  # [batch, time, n_mels]
-        mel_spec = torch.log(torch.clamp(mel_spec, min=1e-5))  # standard imagebind normalization
+        mel_spec = torch.log(torch.clamp(mel_spec, min=1e-5))  # log scale
         
-        # ImageBind's audio trunk expects [batch, time, features] format
-        # which can be rearranged with pattern 'b l d -> l b d'
+        # Normalize using ImageBind's audio normalization params
+        # ImageBind uses mean=-4.268, std=9.138 for audio spectrograms
+        mel_spec = (mel_spec - (-4.268)) / 9.138
+        
+        # ImageBind's audio preprocessor expects input as [batch, 1, n_mels, time]
+        # This is treated as a 2D image and processed by Conv2D patch embedding
+        mel_spec = mel_spec.unsqueeze(1)  # [batch, 1, n_mels, time]
+        
         return mel_spec
 
 
