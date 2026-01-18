@@ -5,7 +5,7 @@ from pathlib import Path
 import torch
 import torchaudio
 
-from mmaudio.eval_utils import (ModelConfig, all_model_cfg, generate, load_video, make_video,
+from mmaudio.eval_utils import (ModelConfig, all_model_cfg, generate, generate_guided, load_video, make_video,
                                 setup_eval_logging)
 from mmaudio.model.flow_matching import FlowMatching
 from mmaudio.model.networks import MMAudio, get_my_mmaudio
@@ -34,6 +34,10 @@ def main():
     parser.add_argument('--num_steps', type=int, default=25)
 
     parser.add_argument('--mask_away_clip', action='store_true')
+    
+    # MDG guidance parameters
+    parser.add_argument('--use_guidance', action='store_true', help='Enable multimodal discrete guidance (MDG)')
+    parser.add_argument('--guidance_scale', type=float, default=500.0, help='MDG guidance scale')
 
     parser.add_argument('--output', type=Path, help='Output directory', default='./output')
     parser.add_argument('--seed', type=int, help='Random seed', default=42)
@@ -61,6 +65,8 @@ def main():
     cfg_strength: float = args.cfg_strength
     skip_video_composite: bool = args.skip_video_composite
     mask_away_clip: bool = args.mask_away_clip
+    use_guidance: bool = args.use_guidance
+    guidance_scale: float = args.guidance_scale
 
     device = 'cpu'
     if torch.cuda.is_available():
@@ -112,14 +118,31 @@ def main():
     log.info(f'Prompt: {prompt}')
     log.info(f'Negative prompt: {negative_prompt}')
 
-    audios = generate(clip_frames,
-                      sync_frames, [prompt],
-                      negative_text=[negative_prompt],
-                      feature_utils=feature_utils,
-                      net=net,
-                      fm=fm,
-                      rng=rng,
-                      cfg_strength=cfg_strength)
+    if use_guidance:
+        if video_path is None:
+            log.error('MDG guidance requires a video input')
+            raise ValueError('--use_guidance requires --video')
+        log.info(f'Using multimodal discrete guidance with scale={guidance_scale}')
+        audios = generate_guided(clip_frames,
+                                sync_frames,
+                                [prompt],
+                                video_path,
+                                negative_text=[negative_prompt],
+                                feature_utils=feature_utils,
+                                net=net,
+                                fm=fm,
+                                rng=rng,
+                                cfg_strength=cfg_strength,
+                                guidance_scale=guidance_scale)
+    else:
+        audios = generate(clip_frames,
+                         sync_frames, [prompt],
+                         negative_text=[negative_prompt],
+                         feature_utils=feature_utils,
+                         net=net,
+                         fm=fm,
+                         rng=rng,
+                         cfg_strength=cfg_strength)
     audio = audios.float().cpu()[0]
     if video_path is not None:
         save_path = output_dir / f'{video_path.stem}.flac'

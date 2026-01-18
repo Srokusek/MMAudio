@@ -144,6 +144,116 @@ def generate(
     return audio
 
 
+def generate_guided(
+    clip_video: Optional[torch.Tensor],
+    sync_video: Optional[torch.Tensor],
+    text: Optional[list[str]],
+    video_path: Path,
+    *,
+    negative_text: Optional[list[str]] = None,
+    feature_utils: FeaturesUtils,
+    net: MMAudio,
+    fm: FlowMatching,
+    rng: torch.Generator,
+    cfg_strength: float,
+    guidance_scale: float = 500.0,
+    mdg_handler = None,
+    clip_batch_size_multiplier: int = 40,
+    sync_batch_size_multiplier: int = 40,
+    image_input: bool = False,
+) -> torch.Tensor:
+    """
+    Generate audio with multimodal discrete guidance (MDG).
+    
+    Args:
+        clip_video: CLIP video frames
+        sync_video: Sync video frames
+        text: List of text prompts
+        video_path: Path to video file for MDG
+        negative_text: List of negative text prompts
+        feature_utils: Feature utilities
+        net: MMAudio network
+        fm: FlowMatching instance
+        rng: Random generator
+        cfg_strength: CFG strength
+        guidance_scale: MDG guidance scale
+        mdg_handler: MDGHandler instance (will be created if None)
+        clip_batch_size_multiplier: Batch size multiplier for CLIP
+        sync_batch_size_multiplier: Batch size multiplier for sync
+        image_input: Whether input is image
+        
+    Returns:
+        Generated audio tensor
+    """
+    device = feature_utils.device
+    dtype = feature_utils.dtype
+
+    bs = len(text)
+    if clip_video is not None:
+        clip_video = clip_video.to(device, dtype, non_blocking=True)
+        clip_features = feature_utils.encode_video_with_clip(clip_video,
+                                                             batch_size=bs *
+                                                             clip_batch_size_multiplier)
+        if image_input:
+            clip_features = clip_features.expand(-1, net.clip_seq_len, -1)
+    else:
+        clip_features = net.get_empty_clip_sequence(bs)
+
+    if sync_video is not None and not image_input:
+        sync_video = sync_video.to(device, dtype, non_blocking=True)
+        sync_features = feature_utils.encode_video_with_sync(sync_video,
+                                                             batch_size=bs *
+                                                             sync_batch_size_multiplier)
+    else:
+        sync_features = net.get_empty_sync_sequence(bs)
+
+    if text is not None:
+        text_features = feature_utils.encode_text(text)
+    else:
+        text_features = net.get_empty_string_sequence(bs)
+
+    if negative_text is not None:
+        assert len(negative_text) == bs
+        negative_text_features = feature_utils.encode_text(negative_text)
+    else:
+        negative_text_features = net.get_empty_string_sequence(bs)
+
+    # Initialize MDG handler if needed
+    if mdg_handler is None:
+        from mmaudio.model.mdg_utils import MDGHandler
+        mdg_handler = MDGHandler(device=str(device))
+        log.info('Preparing MDG conditions...')
+        mdg_handler.prepare_conditions(str(video_path), text)
+    
+    x0 = torch.randn(bs,
+                     net.latent_seq_len,
+                     net.latent_dim,
+                     device=device,
+                     dtype=dtype,
+                     generator=rng)
+    preprocessed_conditions = net.preprocess_conditions(clip_features, sync_features, text_features)
+    empty_conditions = net.get_empty_conditions(
+        bs, negative_text_features=negative_text_features if negative_text is not None else None)
+
+    cfg_ode_wrapper = lambda t, x: net.ode_wrapper(t, x, preprocessed_conditions, empty_conditions,
+                                                   cfg_strength)
+    
+    # Create VAE decode function for MDG
+    def vae_decode_fn(latents):
+        unnormalized = net.unnormalize(latents)
+        spec = feature_utils.decode(unnormalized)
+        audio = feature_utils.vocode(spec)
+        return audio
+    
+    # Use guided sampling
+    log.info(f'Running guided generation with guidance_scale={guidance_scale}')
+    x1 = fm.run_t0_to_t1_guided(cfg_ode_wrapper, x0, 0, 1, mdg_handler, vae_decode_fn, guidance_scale)
+    x1 = net.unnormalize(x1)
+    spec = feature_utils.decode(x1)
+    audio = feature_utils.vocode(spec)
+    return audio
+
+
 LOGFORMAT = "[%(log_color)s%(levelname)-8s%(reset)s]: %(log_color)s%(message)s%(reset)s"
 
 

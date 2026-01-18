@@ -69,3 +69,47 @@ class FlowMatching:
                 x = x + dt * flow
 
         return x
+
+    def run_t0_to_t1_guided(self, fn: Callable, x0: torch.Tensor, t0: float, t1: float, 
+                           mdg_handler, vae_decode_fn: Callable, guidance_scale: float = 500.0) -> torch.Tensor:
+        """
+        Run flow matching with multimodal discrete guidance (MDG).
+        
+        Args:
+            fn: Flow function that takes (t, x) and returns velocity
+            x0: Initial latent state
+            t0: Start time
+            t1: End time
+            mdg_handler: MDGHandler instance for computing guidance gradients
+            vae_decode_fn: Function to decode latents to waveform
+            guidance_scale: Scale factor for guidance gradient
+            
+        Returns:
+            Final latent state
+        """
+        if self.inference_mode == "adaptive":
+            raise NotImplementedError("Adaptive mode is not supported for guided sampling")
+        elif self.inference_mode == "euler":
+            x = x0
+            steps = torch.linspace(t0, t1 - self.min_sigma, self.num_steps + 1, device=x0.device)
+            stop_guidance_at = int(self.num_steps * 0.7)  # only guide in the first 70% 
+            
+            for ti, t in enumerate(steps[:-1]):
+                # Compute base flow without gradients
+                with torch.no_grad():
+                    flow = fn(t, x)
+                
+                # Apply guidance in early steps
+                if ti < stop_guidance_at:
+                    with torch.enable_grad():
+                        x_in = x.detach().requires_grad_(True)  # enable grad for guidance
+                        grad = mdg_handler.compute_multi_source_grad(x_in, fn, t, vae_decode_fn)
+                    # Subtract gradient to minimize volume (maximize alignment)
+                    flow = flow - (grad * guidance_scale)
+                
+                # Euler step
+                next_t = steps[ti + 1]
+                dt = next_t - t
+                x = x + dt * flow
+
+        return x
