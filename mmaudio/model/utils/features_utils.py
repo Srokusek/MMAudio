@@ -145,12 +145,10 @@ class FeaturesUtils(nn.Module):
 
         return dist
 
-    @torch.inference_mode()
     def vocode(self, mel: torch.Tensor) -> torch.Tensor:
         assert self.tod is not None, 'VAE is not loaded'
         return self.tod.vocode(mel)
 
-    @torch.inference_mode()
     def decode(self, z: torch.Tensor) -> torch.Tensor:
         assert self.tod is not None, 'VAE is not loaded'
         return self.tod.decode(z.transpose(1, 2))
