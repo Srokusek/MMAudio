@@ -43,10 +43,8 @@ class AutoEncoderModule(nn.Module):
     def encode(self, x: torch.Tensor) -> DiagonalGaussianDistribution:
         return self.vae.encode(x)
 
-    @torch.inference_mode()
     def decode(self, z: torch.Tensor) -> torch.Tensor:
         return self.vae.decode(z)
 
-    @torch.inference_mode()
     def vocode(self, spec: torch.Tensor) -> torch.Tensor:
         return self.vocoder(spec)
