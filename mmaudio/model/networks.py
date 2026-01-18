@@ -213,12 +213,12 @@ class MMAudio(nn.Module):
         nn.init.constant_(self.empty_sync_feat, 0)
 
     def normalize(self, x: torch.Tensor) -> torch.Tensor:
-        # return (x - self.latent_mean) / self.latent_std
-        return x.sub_(self.latent_mean).div_(self.latent_std)
+        # avoid in-place ops to keep autograd graphs valid during guidance
+        return (x - self.latent_mean) / self.latent_std
 
     def unnormalize(self, x: torch.Tensor) -> torch.Tensor:
-        # return x * self.latent_std + self.latent_mean
-        return x.mul_(self.latent_std).add_(self.latent_mean)
+        # avoid in-place ops to keep autograd graphs valid during guidance
+        return (x * self.latent_std) + self.latent_mean
 
     def preprocess_conditions(self, clip_f: torch.Tensor, sync_f: torch.Tensor,
                               text_f: torch.Tensor) -> PreprocessedConditions:
