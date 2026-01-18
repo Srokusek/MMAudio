@@ -131,12 +131,8 @@ class MDGHandler:
         mel_spec = mel_spec.transpose(1, 2)  # [batch, time, n_mels]
         mel_spec = torch.log(torch.clamp(mel_spec, min=1e-5))  # standard imagebind normalization
         
-        # Reshape to [batch, time, 3*n_mels] to create a flattened 3D tensor for ImageBind
-        # ImageBind expects input that can be rearranged with pattern 'b l d -> l b d'
-        B, T, F = mel_spec.shape
-        mel_spec = mel_spec.reshape(B, T, 3, F // 3 + (F % 3 > 0) * 1)  # split into 3 groups
-        mel_spec = mel_spec.reshape(B, T, -1)  # flatten to 3D [batch, time, flattened_features]
-
+        # ImageBind's audio trunk expects [batch, time, features] format
+        # which can be rearranged with pattern 'b l d -> l b d'
         return mel_spec
 
 
