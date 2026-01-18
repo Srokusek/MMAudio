@@ -82,8 +82,11 @@ class MDGHandler:
         
         # Prepare to encode the audio with imagebind
         audio_inputs = self._differentiable_audio_prep(waveform)
-        a_trunk = self.model.modality_trunks[ModalityType.AUDIO](audio_inputs)
-        a_head = self.model.modality_heads[ModalityType.AUDIO](a_trunk)
+        
+        # Pass through ImageBind's full pipeline: preprocessor -> trunk -> head -> postprocessor
+        audio_preprocessed = self.model.modality_preprocessors[ModalityType.AUDIO](audio=audio_inputs)
+        a_trunk = self.model.modality_trunks[ModalityType.AUDIO](**audio_preprocessed['trunk'])
+        a_head = self.model.modality_heads[ModalityType.AUDIO](a_trunk, **audio_preprocessed['head'])
         a_post = self.model.modality_postprocessors[ModalityType.AUDIO](a_head)
         a_emb = F.normalize(a_post, dim=-1)  # [B, embed_dim]
 
