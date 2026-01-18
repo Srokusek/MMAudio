@@ -108,9 +108,6 @@ def main():
             duration = video_info.duration_sec
             if mask_away_clip:
                 clip_frames = None
-            else:
-                clip_frames = clip_frames.unsqueeze(0)
-            sync_frames = sync_frames.unsqueeze(0)
         else:
             log.info('No video provided -- text-to-audio mode')
             clip_frames = sync_frames = None
@@ -137,9 +134,13 @@ def main():
             log.info(f'Using multimodal discrete guidance with scale={guidance_scale}')
             # replicate frames to batch size
             if clip_frames is not None:
-                clip_frames = clip_frames.unsqueeze(0).expand(bs, -1, -1, -1, -1)
+                if clip_frames.dim() == 4:
+                    clip_frames = clip_frames.unsqueeze(0)
+                clip_frames = clip_frames.expand(bs, -1, -1, -1, -1)
             if sync_frames is not None:
-                sync_frames = sync_frames.unsqueeze(0).expand(bs, -1, -1, -1, -1)
+                if sync_frames.dim() == 4:
+                    sync_frames = sync_frames.unsqueeze(0)
+                sync_frames = sync_frames.expand(bs, -1, -1, -1, -1)
 
             audios = generate_guided(clip_frames,
                                     sync_frames,
@@ -155,9 +156,13 @@ def main():
         else:
             # replicate frames to batch size (text-to-audio or image-to-audio also supported)
             if clip_frames is not None:
-                clip_frames = clip_frames.unsqueeze(0).expand(bs, -1, -1, -1, -1)
+                if clip_frames.dim() == 4:
+                    clip_frames = clip_frames.unsqueeze(0)
+                clip_frames = clip_frames.expand(bs, -1, -1, -1, -1)
             if sync_frames is not None:
-                sync_frames = sync_frames.unsqueeze(0).expand(bs, -1, -1, -1, -1)
+                if sync_frames.dim() == 4:
+                    sync_frames = sync_frames.unsqueeze(0)
+                sync_frames = sync_frames.expand(bs, -1, -1, -1, -1)
 
             audios = generate(clip_frames,
                               sync_frames, prompts,
