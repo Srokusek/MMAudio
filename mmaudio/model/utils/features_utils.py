@@ -83,7 +83,6 @@ class FeaturesUtils(nn.Module):
     def train(self, mode: bool) -> None:
         return super().train(False)
 
-    @torch.inference_mode()
     def encode_video_with_clip(self, x: torch.Tensor, batch_size: int = -1) -> torch.Tensor:
         assert self.clip_model is not None, 'CLIP is not loaded'
         # x: (B, T, C, H, W) H/W: 384
@@ -101,7 +100,6 @@ class FeaturesUtils(nn.Module):
         x = rearrange(x, '(b t) d -> b t d', b=b)
         return x
 
-    @torch.inference_mode()
     def encode_video_with_sync(self, x: torch.Tensor, batch_size: int = -1) -> torch.Tensor:
         assert self.synchformer is not None, 'Synchformer is not loaded'
         # x: (B, T, C, H, W) H/W: 384
@@ -128,7 +126,6 @@ class FeaturesUtils(nn.Module):
         x = rearrange(x, '(b s) 1 t d -> b (s t) d', b=b)
         return x
 
-    @torch.inference_mode()
     def encode_text(self, text: list[str]) -> torch.Tensor:
         assert self.clip_model is not None, 'CLIP is not loaded'
         assert self.tokenizer is not None, 'Tokenizer is not loaded'
