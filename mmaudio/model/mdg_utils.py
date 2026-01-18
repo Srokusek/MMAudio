@@ -74,11 +74,10 @@ class MDGHandler:
         if not isinstance(t, torch.Tensor):
             t = torch.tensor(t, device=latents.device, dtype=latents.dtype)
         
-        # Calculate the gradients for each of the sources (for each of the subjects in text list)
-        velocity_pred = flow_model_fn(t, latents)
-        estimated_clean_latents = latents + (1.0 - t) * velocity_pred  # estimate the clean latents using current flow
-
-        waveform = vae_decode_fn(estimated_clean_latents)  # decode into waveforms
+        # Decode the latents directly to maintain gradient connection
+        # Note: We skip the velocity prediction here to avoid breaking the gradient graph
+        # This uses the current noisy latents instead of estimating clean latents
+        waveform = vae_decode_fn(latents)  # decode into waveforms
         
         # Prepare to encode the audio with imagebind
         audio_inputs = self._differentiable_audio_prep(waveform)
